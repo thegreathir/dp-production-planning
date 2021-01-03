@@ -1,0 +1,19 @@
+{
+    "store": {
+        "capacity": 3,
+        "cost": 1
+    },
+    "production": {
+        "capacity": 4,
+        "constant_cost": 4,
+        "good_cost": 10
+    },
+    "request": [
+        1,
+        2,
+        5,
+        3,
+        2,
+        1
+    ]
+}
