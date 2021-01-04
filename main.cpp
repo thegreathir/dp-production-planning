@@ -4,10 +4,71 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <iomanip>
 
 #include "json.hpp"
 
 using json = nlohmann::json;
+
+void print_table(const std::vector<std::vector<std::string>> &table)
+{
+  constexpr char boxing[] = "++|-+++++++";
+  constexpr std::size_t pad_size = 2;
+  std::vector<std::size_t> columns_width;
+  for (std::size_t col_index = 0; col_index < table[0].size(); ++col_index)
+  {
+    std::optional<std::size_t> max_width;
+    for (std::size_t row_index = 0; row_index < table.size(); ++row_index)
+    {
+      if (!max_width || max_width.value() < table[row_index][col_index].length() + pad_size)
+        max_width = table[row_index][col_index].length() + pad_size;
+    }
+
+    columns_width.emplace_back(max_width.value());
+  }
+
+  std::cout << boxing[8];
+  for (std::size_t col_index = 0; col_index < table[0].size(); ++col_index)
+  {
+    std::cout << std::string(columns_width[col_index], boxing[3]);
+    if (col_index < table[0].size() - 1)
+      std::cout << boxing[1];
+    else
+      std::cout << boxing[7] << std::endl;
+  }
+
+  for (std::size_t row_index = 0; row_index < table.size(); ++row_index)
+  {
+    std::cout << boxing[2];
+    for (std::size_t col_index = 0; col_index < table[0].size(); ++col_index)
+    {
+      std::cout << std::setw(columns_width[col_index]) << table[row_index][col_index];
+      std::cout << boxing[2];
+    }
+    std::cout << std::endl;
+
+    if (row_index == table.size() - 1)
+      continue;
+    std::cout << boxing[10];
+    for (std::size_t col_index = 0; col_index < table[0].size(); ++col_index)
+    {
+      std::cout << std::string(columns_width[col_index], boxing[3]);
+      if (col_index < table[0].size() - 1)
+        std::cout << boxing[4];
+      else
+        std::cout << boxing[9] << std::endl;
+    }
+  }
+  std::cout << boxing[5];
+  for (std::size_t col_index = 0; col_index < table[0].size(); ++col_index)
+  {
+    std::cout << std::string(columns_width[col_index], boxing[3]);
+    if (col_index < table[0].size() - 1)
+      std::cout << boxing[0];
+    else
+      std::cout << boxing[6] << std::endl;
+  }
+}
 
 class DpProductionPlanner
 {
@@ -51,25 +112,39 @@ class DpProductionPlanner
 
   static void print_stage(const Stage &stage)
   {
-    for (auto &&state : stage.states)
+    std::vector<std::vector<std::string>> table;
+
+    std::vector<std::string> header;
+    header.push_back("s\\x");
+    for (std::size_t i = 0; i < stage.states[0].decisions.size(); ++i)
+      header.push_back(std::to_string(i));
+    header.push_back("optimal cost");
+    header.push_back("x*");
+
+    table.push_back(header);
+
+    for (std::size_t state_it = 0; state_it < stage.states.size(); ++state_it)
     {
-      for (auto &&x : state.decisions)
+      std::vector<std::string> row;
+      row.push_back(std::to_string(state_it));
+      for (std::size_t x = 0; x < stage.states[state_it].decisions.size(); ++x)
       {
-        std::cout << to_string(x) << "\t";
+        row.push_back(to_string(stage.states[state_it].decisions[x]));
       }
-      std::cout << "||\t";
-      std::cout << to_string(state.optimal_cost) << "\t";
-      std::cout << to_string(state.optimal_decision);
-      std::cout << std::endl;
+      row.push_back(to_string(stage.states[state_it].optimal_cost));
+      row.push_back(to_string(stage.states[state_it].optimal_decision));
+      table.push_back(row);
     }
-    std::cout << "______________________________" << std::endl
-              << std::endl;
+
+    print_table(table);
+    std::cout << std::endl;
   }
 
   const std::size_t production_capacity;
   const std::size_t store_capacity;
   const std::size_t store_cost;
   const std::size_t constant_production_cost;
+  const std::size_t good_production_cost;
 
   std::vector<Stage> stages;
   std::vector<int> requests;
@@ -89,19 +164,35 @@ public:
         if (stage_index > 0)
           used_store_space += state.optimal_decision.value() - reversed_requests[stage_index];
       }
+      else
+      {
+        std::cout << "No solution found!" << std::endl;
+        return;
+      }
     }
+    std::cout << "Optimal decisions:" << std::endl;
     for (auto iterator = results.begin(); iterator < results.end(); iterator++)
       std::cout << "x" << (iterator - results.begin()) << ": " << (*iterator) << std::endl;
+
+    std::size_t total_cost = 0;
+    for (auto &&request : requests)
+      total_cost += good_production_cost * request;
+
+    total_cost += stages.back().states[0].optimal_cost.value();
+
+    std::cout << "Total cost: " << total_cost << std::endl;
   }
 
   DpProductionPlanner(const std::size_t i_production_capacity,
                       const std::size_t i_store_capacity,
                       const std::size_t i_store_cost,
                       const std::size_t i_constant_production_cost,
+                      const std::size_t i_good_production_cost,
                       const std::vector<int> &i_requests) : production_capacity(i_production_capacity),
                                                             store_capacity(i_store_capacity),
                                                             store_cost(i_store_cost),
                                                             constant_production_cost(i_constant_production_cost),
+                                                            good_production_cost(i_good_production_cost),
                                                             stages(init_stages(production_capacity, store_capacity, i_requests.size())),
                                                             requests(i_requests),
                                                             reversed_requests(i_requests.size())
@@ -158,6 +249,7 @@ public:
         stages[stage_it].states[state].optimal_cost = optimal_cost;
         stages[stage_it].states[state].optimal_decision = optimal_decision;
       }
+      std::cout << "Stage " << reversed_requests.size() - stage_it << ":" << std::endl;
       print_stage(stages[stage_it]);
     }
   }
@@ -169,13 +261,14 @@ int main()
   json config;
   config_stream >> config;
 
-  std::vector<int> requests(config["request"].size());
-  std::copy(config["request"].begin(), config["request"].end(), requests.begin());
+  std::vector<int> requests(config["requests"].size());
+  std::copy(config["requests"].begin(), config["requests"].end(), requests.begin());
 
   DpProductionPlanner dpp(config["production"]["capacity"],
                           config["store"]["capacity"],
                           config["store"]["cost"],
                           config["production"]["constant_cost"],
+                          config["production"]["good_cost"],
                           requests);
 
   dpp.calculate_stages();
