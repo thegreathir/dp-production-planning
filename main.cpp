@@ -76,6 +76,24 @@ class DpProductionPlanner
   std::vector<int> reversed_requests;
 
 public:
+  void trace_stages()
+  {
+    std::vector<std::size_t> results;
+    std::size_t used_store_space = 0;
+    for (int stage_index = stages.size() - 1; stage_index >= 0; stage_index--)
+    {
+      const auto &state = stages[stage_index].states[used_store_space];
+      if (state.optimal_decision)
+      {
+        results.emplace_back(state.optimal_decision.value());
+        if (stage_index > 0)
+          used_store_space += state.optimal_decision.value() - reversed_requests[stage_index];
+      }
+    }
+    for (auto iterator = results.begin(); iterator < results.end(); iterator++)
+      std::cout << "x" << (iterator - results.begin()) << ": " << (*iterator) << std::endl;
+  }
+
   DpProductionPlanner(const std::size_t i_production_capacity,
                       const std::size_t i_store_capacity,
                       const std::size_t i_store_cost,
@@ -91,7 +109,7 @@ public:
     std::reverse_copy(i_requests.begin(), i_requests.end(), reversed_requests.begin());
   }
 
-  void do_the_thing()
+  void calculate_stages()
   {
     for (int stage_it = 0; stage_it < reversed_requests.size(); ++stage_it)
     {
@@ -160,7 +178,8 @@ int main()
                           config["production"]["constant_cost"],
                           requests);
 
-  dpp.do_the_thing();
+  dpp.calculate_stages();
+  dpp.trace_stages();
 
   return 0;
 }
